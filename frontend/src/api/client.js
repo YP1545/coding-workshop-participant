@@ -78,6 +78,22 @@ export async function request(service, path, { method = 'GET', body, query } = {
 
   if (response.status === 204) return null
 
+  // CloudFront rewrites every 404 in the distribution to /index.html with a
+  // 200, so that a deep link into the single-page app loads the app instead of
+  // an error (infra/cloudfront.tf custom_error_response). That rule is not
+  // scoped to the site's own paths, so an API 404 arrives here as 200 with an
+  // HTML body — losing its status on the way through.
+  //
+  // Without this check `response.ok` is true, parsing HTML as JSON fails, and
+  // the caller gets an empty object rather than an error: opening a deleted
+  // incident would render a blank page instead of saying it is gone. There is
+  // no way to fix it at the edge without changing infra/, which this project
+  // treats as fixed, so it is recognised here instead.
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('json')) {
+    throw new ApiError(404, 'Not found')
+  }
+
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) {
     throw new ApiError(response.status, payload.detail || `Request failed (${response.status})`)

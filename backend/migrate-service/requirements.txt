@@ -1,0 +1,15 @@
+# Runtime dependencies for the migration runner. Pinned exactly, and matching
+# the versions the application services use so a migration cannot be generated
+# against one SQLAlchemy and applied by another.
+#
+# alembic    — runs the migrations
+# SQLAlchemy — the models the migrations are generated from
+# psycopg    — PostgreSQL driver
+# bcrypt     — hashes the demo accounts' password when seeding
+#
+# Deliberately no fastapi or mangum: this function is never an HTTP endpoint.
+
+alembic==1.20.0
+SQLAlchemy==2.0.54
+psycopg[binary]==3.2.3
+bcrypt==5.0.0

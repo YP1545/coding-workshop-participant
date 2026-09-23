@@ -80,15 +80,35 @@ def stamp_timestamps(incident, new_status):
     """
     Fill in the lifecycle timestamp that goes with this status.
 
-    acknowledged_at is only set the first time an incident is picked up. If it
+    Three different rules here, and the differences are deliberate.
+
+    acknowledged_at is set only the first time an incident is picked up. If it
     were overwritten every time work restarted, "how long until someone looked
     at it" would drift later and later and stop meaning anything.
+
+    resolved_at is CLEARED when an incident leaves resolved. An engineer who
+    resolves something by mistake and moves it back to in progress would
+    otherwise leave a resolution date on an unresolved incident — which reads
+    as a contradiction on the detail page, and quietly corrupts the admin's
+    "average hours to resolve", because that average counts every incident with
+    a resolved_at and would include a resolution that was undone.
+
+    Nothing is lost by clearing it: incident_status_history still records that
+    the incident was resolved at that moment and then reopened, so the mistake
+    is auditable even though the summary field no longer claims it is resolved.
+
+    closed_at is not cleared, because closed is terminal — ALLOWED_TRANSITIONS
+    lets nothing leave it, so the stamp can never go stale.
     """
     if new_status == IncidentStatus.IN_PROGRESS and incident.acknowledged_at is None:
         incident.acknowledged_at = now()
 
     if new_status == IncidentStatus.RESOLVED:
         incident.resolved_at = now()
+    elif new_status != IncidentStatus.CLOSED:
+        # Reopened. Closing a resolved incident keeps the stamp, because it
+        # genuinely was resolved before it was closed.
+        incident.resolved_at = None
 
     if new_status == IncidentStatus.CLOSED:
         incident.closed_at = now()

@@ -221,3 +221,98 @@ def test_an_engineer_sees_only_their_own_request_on_an_incident(engineer, admin,
     _, theirs = engineer.get("incidents", f"/incidents/{incident['id']}/assignment-requests")
 
     assert len(theirs) == 1
+
+
+# --- Reopening a resolved incident ------------------------------------------
+
+
+def resolve_then(engineer, admin, incident_id, next_status):
+    """Take an incident to resolved, then move it on. Returns the final body."""
+    admin.patch("incidents", f"/incidents/{incident_id}/status", {"status": "in_progress"})
+    resolved, _ = admin.patch(
+        "incidents", f"/incidents/{incident_id}/status", {"status": "resolved"})
+    assert resolved == 200
+
+    moved, body = admin.patch(
+        "incidents", f"/incidents/{incident_id}/status", {"status": next_status})
+    assert moved == 200, body
+    return body
+
+
+def test_reopening_a_resolved_incident_clears_the_resolution_date(engineer, admin, incident):
+    """
+    An engineer resolves something by mistake and moves it back.
+
+    Leaving resolved_at behind would show a resolution date on an incident that
+    is not resolved — a contradiction on the detail page, and a number the
+    dashboard would average as if the work were finished.
+    """
+    _, after_resolve = admin.patch(
+        "incidents", f"/incidents/{incident['id']}/status", {"status": "in_progress"})
+    _, after_resolve = admin.patch(
+        "incidents", f"/incidents/{incident['id']}/status", {"status": "resolved"})
+    assert after_resolve["resolved_at"] is not None
+
+    reopened = resolve_then(engineer, admin, incident["id"], "in_progress")
+
+    assert reopened["status"] == "in_progress"
+    assert reopened["resolved_at"] is None
+
+
+def test_closing_a_resolved_incident_keeps_the_resolution_date(engineer, admin, incident):
+    """
+    The mirror case. An incident that was genuinely resolved and then closed
+    keeps its resolution date — that is how long the work actually took.
+    """
+    closed = resolve_then(engineer, admin, incident["id"], "closed")
+
+    assert closed["status"] == "closed"
+    assert closed["resolved_at"] is not None
+    assert closed["closed_at"] is not None
+
+
+def test_reopening_does_not_erase_that_it_was_resolved(services, engineer, admin, incident):
+    """
+    Clearing the stamp must not lose the audit trail.
+
+    incident_status_history still records the resolve and the reopen, so the
+    mistake stays visible even though the summary field no longer claims the
+    incident is resolved. That is what makes clearing it safe.
+    """
+    from db import session_scope
+    from models import IncidentStatus, IncidentStatusHistory
+    from sqlalchemy import select
+
+    resolve_then(engineer, admin, incident["id"], "in_progress")
+
+    with session_scope() as db:
+        moves = db.scalars(
+            select(IncidentStatusHistory)
+            .where(IncidentStatusHistory.incident_id == incident["id"])
+            .order_by(IncidentStatusHistory.changed_at)
+        ).all()
+        transitions = [(row.from_status, row.to_status) for row in moves]
+
+    assert (IncidentStatus.IN_PROGRESS, IncidentStatus.RESOLVED) in transitions, \
+        "the resolve should still be on the record"
+    assert (IncidentStatus.RESOLVED, IncidentStatus.IN_PROGRESS) in transitions, \
+        "the reopen should be on the record too"
+
+
+def test_a_reopened_incident_is_not_counted_as_resolved(services, engineer, admin, incident):
+    """
+    The reason this bug mattered beyond the detail page.
+
+    avg_hours_to_resolve averages every incident that has a resolved_at, so a
+    stale stamp would have folded an undone resolution into the site-wide
+    figure an admin reads.
+    """
+    from db import session_scope
+    from models import Incident
+    from sqlalchemy import select
+
+    resolve_then(engineer, admin, incident["id"], "in_progress")
+
+    with session_scope() as db:
+        row = db.scalar(select(Incident).where(Incident.id == incident["id"]))
+        assert row.resolved_at is None, "a reopened incident must not look resolved to the dashboard"

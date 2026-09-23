@@ -12,10 +12,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, request, setAuthToken, SERVICES } from './client'
 
-function respondWith(status, payload) {
+/**
+ * A stand-in for fetch's Response.
+ *
+ * headers is included because the client reads content-type to recognise
+ * CloudFront's rewritten 404s — a mock without it does not behave like the
+ * thing being stood in for, and the difference only shows up once deployed.
+ *
+ * @param {number} status the HTTP status to return.
+ * @param {*} payload the parsed JSON body.
+ * @param {string} [contentType] override, for the not-JSON cases.
+ */
+function respondWith(status, payload, contentType = 'application/json') {
   return vi.fn().mockResolvedValue({
     status,
     ok: status >= 200 && status < 300,
+    headers: { get: (name) => (name === 'content-type' ? contentType : null) },
     json: () => Promise.resolve(payload),
   })
 }
@@ -71,7 +83,10 @@ describe('the API client', () => {
 
   it('still raises something useful when the body is not JSON', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      status: 500, ok: false, json: () => Promise.reject(new Error('not json')),
+      status: 500, ok: false,
+      // Claims JSON but is not, which is what a crashed server actually sends.
+      headers: { get: () => 'application/json' },
+      json: () => Promise.reject(new Error('not json')),
     }))
 
     await expect(request(SERVICES.incidents, '/incidents')).rejects.toBeInstanceOf(ApiError)
@@ -106,5 +121,38 @@ describe('the API client', () => {
     await request(SERVICES.incidents, '/incidents', { query: { status: '' } })
 
     expect(fetchMock.mock.calls[0][0]).not.toContain('?')
+  })
+})
+
+describe('CloudFront rewriting 404s', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('treats an HTML body as not found, whatever status it arrived with', async () => {
+    // What the deployed stack actually returns for a missing resource: the
+    // distribution's custom_error_response turns the Lambda's 404 into a 200
+    // serving /index.html. Without recognising it, response.ok is true and the
+    // caller receives an empty object instead of an error.
+    vi.stubGlobal('fetch', respondWith(200, null, 'text/html; charset=utf-8'))
+
+    await expect(request(SERVICES.incidents, '/incidents/missing')).rejects.toMatchObject({
+      status: 404,
+      detail: 'Not found',
+    })
+  })
+
+  it('still returns a normal JSON response', async () => {
+    vi.stubGlobal('fetch', respondWith(200, { id: 'incident-1' }))
+
+    await expect(request(SERVICES.incidents, '/incidents/incident-1'))
+      .resolves.toEqual({ id: 'incident-1' })
+  })
+
+  it('leaves a 204 alone, which carries no content-type at all', async () => {
+    vi.stubGlobal('fetch', respondWith(204, null, null))
+
+    await expect(request(SERVICES.incidents, '/incidents/x', { method: 'DELETE' }))
+      .resolves.toBeNull()
   })
 })

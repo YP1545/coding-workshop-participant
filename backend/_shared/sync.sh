@@ -26,7 +26,18 @@ for service_dir in "$BACKEND_DIR"/*/; do
     # infra/locals.tf and bin/start-dev.sh, so they are not services.
     [[ "$service" == _* ]] && continue
 
-    for module in "${MODULES[@]}"; do
+    # The migration runner imports no web framework, so it gets only the two
+    # modules Alembic's env.py needs. Copying app.py or deps.py there would put
+    # fastapi imports in a package whose requirements.txt has no fastapi —
+    # harmless while nothing imports them, and misleading to whoever reads it
+    # next.
+    if [ "$service" = "migrate-service" ]; then
+        service_modules=(db.py models.py seed.py)
+    else
+        service_modules=("${MODULES[@]}")
+    fi
+
+    for module in "${service_modules[@]}"; do
         if cmp -s "$SHARED_DIR/$module" "$service_dir/$module"; then
             echo "  = $service/$module"
         else
@@ -35,5 +46,22 @@ for service_dir in "$BACKEND_DIR"/*/; do
         fi
     done
 done
+
+# The migration runner needs the migrations themselves, which the other
+# services have no use for. Copied here rather than kept in its own directory so
+# there is still exactly one set of migration files, matching one models.py.
+MIGRATE_DIR="$BACKEND_DIR/migrate-service"
+if [ -d "$MIGRATE_DIR" ]; then
+    echo "Syncing migrations into migrate-service"
+    cp "$SHARED_DIR/alembic.ini" "$MIGRATE_DIR/alembic.ini"
+    rm -rf "$MIGRATE_DIR/alembic"
+    # --parents would carry __pycache__ across; the find keeps the copy to the
+    # files Alembic actually reads.
+    mkdir -p "$MIGRATE_DIR/alembic/versions"
+    cp "$SHARED_DIR/alembic/env.py" "$MIGRATE_DIR/alembic/env.py"
+    cp "$SHARED_DIR/alembic/script.py.mako" "$MIGRATE_DIR/alembic/script.py.mako"
+    cp "$SHARED_DIR"/alembic/versions/*.py "$MIGRATE_DIR/alembic/versions/"
+    echo "  > $(ls "$MIGRATE_DIR/alembic/versions" | wc -l) migration(s)"
+fi
 
 echo "Done."
