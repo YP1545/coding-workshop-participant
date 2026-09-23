@@ -1,0 +1,20 @@
+# Runtime dependencies for this Lambda. Pinned exactly so a redeploy cannot
+# silently pick up a new major version.
+#
+# fastapi    — routing, validation and the generated API documentation
+# mangum     — adapts a Lambda Function URL event to the ASGI app
+# pydantic   — comes with FastAPI; the request and response models
+# psycopg    — PostgreSQL driver
+# SQLAlchemy — the ORM the shared models.py is written against
+# PyJWT      — signs and verifies bearer tokens (HS256)
+# bcrypt     — password hashing
+#
+# Migration and seeding tools are NOT here — they live in
+# backend/_shared/requirements-dev.txt and never ship to Lambda.
+
+fastapi==0.141.1
+mangum==0.22.0
+psycopg[binary]==3.2.3
+SQLAlchemy==2.0.54
+PyJWT==2.14.0
+bcrypt==5.0.0

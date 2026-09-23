@@ -1,0 +1,20 @@
+# Tooling for migrations and seeding — NOT deployed to Lambda.
+#
+# Part of: backend / migrations.
+#
+# Named requirements-dev.txt rather than requirements.txt on purpose: bin/start-dev.sh
+# pip-installs every backend/*/requirements.txt into its own directory, and this
+# directory ships no Lambda. Service runtime dependencies live in each service's
+# own requirements.txt.
+
+SQLAlchemy==2.0.54
+alembic==1.20.0
+psycopg[binary]==3.2.3
+bcrypt==5.0.0
+PyJWT==2.14.0
+fastapi==0.141.1
+mangum==0.22.0
+uvicorn==0.53.0
+httpx==0.28.1
+pytest==8.4.2
+pytest-cov==7.0.0
