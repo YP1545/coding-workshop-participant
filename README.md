@@ -68,7 +68,7 @@ CloudFront ──── /             ──▶  S3 (the built React app)
                                          │
                                       FastAPI
                                          │
-                                   Aurora Serverless v2 (PostgreSQL 17.7)
+                                    (PostgreSQL 17.7)
 ```
 
 **Stack:** React 19 · MUI 9 · Vite 7 · FastAPI 0.141 · SQLAlchemy 2.0 ·
