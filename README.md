@@ -273,6 +273,43 @@ because anyone can open DevTools and call it directly.
 assignment dropdowns while their profile survives. Deleting it would blank the
 assignee on every incident they ever closed.
 
+---
+
+## Three bugs that only existed once deployed
+
+Worth recording, because none of them can happen on localhost.
+
+**API 404s arrived as 200 with HTML.** CloudFront rewrites every 404 to
+`index.html` so deep links into the single-page app work — but that rule is
+distribution-wide, so it caught the API too. The client saw success, failed to
+parse HTML as JSON, and returned an empty object. Recognised in
+[`client.js`](./frontend/src/api/client.js) by content type.
+
+**Every deep link returned raw `AccessDenied` XML.** S3 answers 403 rather than
+404 for a missing key unless `ListBucket` is granted — it will not reveal
+whether the object exists — and only 404 was mapped. Fixed by
+[`fix-spa-routing.sh`](./deploy/fix-spa-routing.sh).
+
+**Seeding reported a password it had not used.** Lambda reuses a warm container,
+so a module-level read of the password happened once, on the first invocation. It
+did not error — it returned success and a password that would never work. Every
+local run is a fresh process, so this could not happen on a developer machine.
+
+---
+
+## What is not done
+
+- **Frontend test coverage is 61% of lines, against an 80% target.** Function
+  coverage is lower still at 33% — several pages have no tests at all. The API
+  client and the core journeys are covered.
+- **No browser end-to-end test.** The full journey has been walked by hand on
+  the deployed stack, which is not the same thing.
+- **Three post-deploy steps are manual**, scripted but not enforced.
+- **The four services share one database**, so they are independently deployed
+  rather than independent. Real separation means each owning its own schema —
+  cost without benefit at this size.
+- **No SLA alerting, no notifications, no admin screen for categories** —
+  deliberate MVP cuts, recorded in [`project.md`](./project.md).
 
 ---
 
