@@ -211,21 +211,7 @@ Each failure appears only when somebody tries to use the app, by which point
 the deploy looks finished. One command after every deploy is the cheapest way
 not to be caught by that.
 
-### Migrations run from inside the VPC
 
-Aurora is created without `publicly_accessible`, so it has no public endpoint
-and `alembic upgrade head` cannot reach it from a developer machine.
-[`migrate-service`](./backend/migrate-service/) exists to do nothing but that.
-
-Terraform gives every discovered service a public Function URL, so that one is
-on the internet too — the handler **refuses anything shaped like an HTTP
-request**. A Function URL event carries `requestContext`; a direct invoke does
-not. The only way to run it is AWS credentials that already have
-`lambda:InvokeFunction`.
-
-[`deploy/schema.sql`](./deploy/schema.sql) is the same schema as plain SQL,
-generated offline from the migrations, for the case where you would rather run
-`psql` from a CloudShell VPC environment than deploy a migration runner.
 
 ---
 
