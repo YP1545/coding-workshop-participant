@@ -36,8 +36,19 @@ export default function IncidentsPage() {
   const [buildings, setBuildings] = useState([])
   const [engineers, setEngineers] = useState([])
   const [categories, setCategories] = useState([])
+  // Floors and seats are loaded on demand rather than all at once: they only
+  // mean anything once a building, then a floor, has been chosen.
+  //
+  // Each list is stored with the id it belongs to. Switching building while the
+  // previous building's floors are still in state would otherwise offer them
+  // for a moment — and picking one asks for a floor that is not in the selected
+  // building, which returns nothing and reads as "no incidents" rather than
+  // "those filters contradict each other".
+  const [loadedFloors, setLoadedFloors] = useState({ buildingId: '', items: [] })
+  const [loadedSeats, setLoadedSeats] = useState({ floorId: '', items: [] })
   const [filters, setFilters] = useState({
-    status: '', priority: '', category: '', building_id: '',
+    status: '', priority: '', category: '',
+    building_id: '', floor_id: '', seat_id: '', assignee_id: '',
   })
   // The term actually being searched for lives in the URL, not in state. The
   // search bar sits in the app frame, so a second search changes the address
@@ -85,6 +96,34 @@ export default function IncidentsPage() {
 
   const pageCount = Math.ceil(total / PAGE_SIZE)
 
+  // A building's floors, and a floor's seats, fetched when one is chosen. The
+  // cleanup flag stops a slow response for a building that has since been
+  // changed from overwriting the list for the current one.
+  useEffect(() => {
+    const buildingId = filters.building_id
+    if (!buildingId) return undefined
+
+    facilitiesApi.listFloors(buildingId)
+      .then((items) => setLoadedFloors({ buildingId, items }))
+      .catch(() => setLoadedFloors({ buildingId, items: [] }))
+    return undefined
+  }, [filters.building_id])
+
+  useEffect(() => {
+    const floorId = filters.floor_id
+    if (!floorId) return undefined
+
+    facilitiesApi.listSeats(floorId)
+      .then((items) => setLoadedSeats({ floorId, items }))
+      .catch(() => setLoadedSeats({ floorId, items: [] }))
+    return undefined
+  }, [filters.floor_id])
+
+  // Derived, not stored: a list is only offered when it is the list for what is
+  // currently selected.
+  const floors = loadedFloors.buildingId === filters.building_id ? loadedFloors.items : []
+  const seats = loadedSeats.floorId === filters.floor_id ? loadedSeats.items : []
+
   // Buildings fill the filter dropdown; engineers turn an assignee id in the
   // table into a name. Both fail quietly: a missing lookup costs a dash in one
   // column, which is not a reason to fail the whole page.
@@ -107,7 +146,22 @@ export default function IncidentsPage() {
    * somebody looking at an empty page and wondering where their incidents went.
    */
   function updateFilter(name, value) {
-    setFilters({ ...filters, [name]: value })
+    const next = { ...filters, [name]: value }
+
+    // Location narrows downward, so changing a level clears the ones below it.
+    // Without this, picking a new building while a floor from the old one is
+    // still selected asks for a floor that is not in that building — which is
+    // a valid query returning nothing, and reads as "no incidents" rather than
+    // "those two filters contradict each other".
+    if (name === 'building_id') {
+      next.floor_id = ''
+      next.seat_id = ''
+    }
+    if (name === 'floor_id') {
+      next.seat_id = ''
+    }
+
+    setFilters(next)
     setPage(1)
   }
 
@@ -196,6 +250,43 @@ export default function IncidentsPage() {
                   <MenuItem value="">Any building</MenuItem>
                   {buildings.map((building) => (
                     <MenuItem key={building.id} value={building.id}>{building.name}</MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+
+              {/* Floor and seat are disabled until the level above is chosen:
+                  a floor means nothing without its building, and an enabled
+                  dropdown with nothing in it looks broken. */}
+              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                <TextField select fullWidth size="small" label="Floor" value={filters.floor_id}
+                           disabled={!filters.building_id}
+                           helperText={filters.building_id ? ' ' : 'Choose a building first'}
+                           onChange={(event) => updateFilter('floor_id', event.target.value)}>
+                  <MenuItem value="">Any floor</MenuItem>
+                  {floors.map((floor) => (
+                    <MenuItem key={floor.id} value={floor.id}>{floor.name}</MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                <TextField select fullWidth size="small" label="Seat" value={filters.seat_id}
+                           disabled={!filters.floor_id}
+                           helperText={filters.floor_id ? ' ' : 'Choose a floor first'}
+                           onChange={(event) => updateFilter('seat_id', event.target.value)}>
+                  <MenuItem value="">Any seat</MenuItem>
+                  {seats.map((seat) => (
+                    <MenuItem key={seat.id} value={seat.id}>{seat.label}</MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                <TextField select fullWidth size="small" label="Assignee" value={filters.assignee_id}
+                           onChange={(event) => updateFilter('assignee_id', event.target.value)}>
+                  <MenuItem value="">Anyone</MenuItem>
+                  {engineers.map((engineer) => (
+                    <MenuItem key={engineer.id} value={engineer.id}>
+                      {engineer.full_name || 'Engineer'}
+                    </MenuItem>
                   ))}
                 </TextField>
               </Grid>

@@ -42,9 +42,16 @@ function pageOf(count, total) {
 describe('IncidentsPage', () => {
   beforeEach(() => {
     incidentsApi.listIncidents.mockResolvedValue(pageOf(10, 25))
-    facilitiesApi.listBuildings.mockResolvedValue([{ id: 'building-1', name: 'HQ Tower' }])
+    facilitiesApi.listBuildings.mockResolvedValue([
+      { id: 'building-1', name: 'HQ Tower' },
+      { id: 'building-2', name: 'Riverside Annex' },
+    ])
+    facilitiesApi.listFloors.mockResolvedValue([{ id: 'floor-1', name: 'Level 1' }])
+    facilitiesApi.listSeats.mockResolvedValue([{ id: 'seat-1', label: '1-A12' }])
     // The table turns an assignee id into a name, so the page loads the roster.
-    engineersApi.listEngineers.mockResolvedValue([])
+    engineersApi.listEngineers.mockResolvedValue([
+      { id: 'engineer-1', full_name: 'Alex Chen', availability: 'available' },
+    ])
     // Categories come from the database now, so the filter dropdown fetches them.
     incidentsApi.listCategories.mockResolvedValue([
       { slug: 'plumbing', name: 'Plumbing', sort_order: 30 },
@@ -165,5 +172,84 @@ describe('IncidentsPage', () => {
 
     // The box shows the term too, so it can be edited rather than retyped.
     expect(screen.getByLabelText(/search incidents/i)).toHaveValue('radiator')
+  })
+})
+
+describe('IncidentsPage location filters', () => {
+  beforeEach(() => {
+    incidentsApi.listIncidents.mockResolvedValue(pageOf(10, 25))
+    incidentsApi.listCategories.mockResolvedValue([])
+    facilitiesApi.listBuildings.mockResolvedValue([
+      { id: 'building-1', name: 'HQ Tower' },
+      { id: 'building-2', name: 'Riverside Annex' },
+    ])
+    facilitiesApi.listFloors.mockResolvedValue([{ id: 'floor-1', name: 'Level 1' }])
+    facilitiesApi.listSeats.mockResolvedValue([{ id: 'seat-1', label: '1-A12' }])
+    engineersApi.listEngineers.mockResolvedValue([
+      { id: 'engineer-1', full_name: 'Alex Chen', availability: 'available' },
+    ])
+  })
+
+  it('will not let you pick a floor before a building', async () => {
+    renderWithProviders(<IncidentsPage />)
+
+    // A floor means nothing without its building, and an enabled dropdown with
+    // nothing in it looks broken rather than unavailable.
+    const floor = await screen.findByLabelText(/floor/i)
+    expect(floor).toHaveAttribute('aria-disabled', 'true')
+  })
+
+  it('loads a building\'s floors once one is chosen', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<IncidentsPage />)
+
+    await user.click(await screen.findByLabelText(/building/i))
+    await user.click(await screen.findByRole('option', { name: 'HQ Tower' }))
+
+    await waitFor(() => {
+      expect(facilitiesApi.listFloors).toHaveBeenCalledWith('building-1')
+    })
+  })
+
+  it('clears the floor when the building changes', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<IncidentsPage />)
+
+    await user.click(await screen.findByLabelText(/building/i))
+    await user.click(await screen.findByRole('option', { name: 'HQ Tower' }))
+    await user.click(await screen.findByLabelText(/floor/i))
+    await user.click(await screen.findByRole('option', { name: 'Level 1' }))
+
+    await waitFor(() => {
+      expect(incidentsApi.listIncidents).toHaveBeenCalledWith(
+        expect.objectContaining({ building_id: 'building-1', floor_id: 'floor-1' }),
+      )
+    })
+
+    // Switching building must drop the floor with it: asking for a floor that
+    // is not in the selected building returns nothing, which reads as "no
+    // incidents" rather than "those two filters contradict each other".
+    await user.click(screen.getByLabelText(/building/i))
+    await user.click(await screen.findByRole('option', { name: 'Riverside Annex' }))
+
+    await waitFor(() => {
+      expect(incidentsApi.listIncidents).toHaveBeenLastCalledWith(
+        expect.objectContaining({ building_id: 'building-2', floor_id: '' }),
+      )
+    })
+  })
+
+  it('filters by assignee, which is how an admin sees one engineer\'s plate', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<IncidentsPage />)
+
+    await user.click(await screen.findByLabelText(/assignee/i))
+    await user.click(await screen.findByRole('option', { name: 'Alex Chen' }))
+
+    await waitFor(() => {
+      expect(incidentsApi.listIncidents).toHaveBeenCalledWith(
+        expect.objectContaining({ assignee_id: 'engineer-1', offset: 0 }),
+      )
+    })
   })
 })

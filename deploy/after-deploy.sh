@@ -11,6 +11,8 @@
 #   * JWT_SECRET on each Lambda. Without it sign-in returns 500.
 #   * s3:ListBucket for CloudFront. Without it every deep link returns S3's
 #     AccessDenied XML instead of the app.
+#   * Lambda memory. The scaffold sets 128MB, which is about a twelfth of a
+#     vCPU, and bcrypt made signing in take four seconds.
 #
 # Neither failure appears until somebody tries to sign in or opens a link, by
 # which point the deploy looks finished. One command after every deploy is the
@@ -33,14 +35,18 @@ echo "  Re-applying what Terraform reverts"
 echo "============================================================"
 echo
 
-echo "[1/2] Signing secret"
+echo "[1/3] Signing secret"
 "$HERE/set-jwt-secret.sh" | sed 's/^/  /'
 echo
 
-echo "[2/2] Single-page-app routing"
+echo "[2/3] Single-page-app routing"
 "$HERE/fix-spa-routing.sh" | sed 's/^/  /'
 echo
 
+echo "[3/3] Lambda memory"
+"$HERE/set-lambda-memory.sh" | sed 's/^/  /'
+echo
+
 echo "============================================================"
-echo "  Done. Sign-in and deep links should both work."
+echo "  Done. Sign-in, deep links and response times all restored."
 echo "============================================================"
