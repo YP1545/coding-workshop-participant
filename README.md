@@ -10,12 +10,6 @@ The scaffold's Terraform and shell scripts (`infra/`, `bin/`) are **unchanged** 
 this application was written to fit them. The original workshop material is in
 [`docs/README.md`](./docs/README.md).
 
-| | |
-|---|---|
-| 41 REST endpoints | across four services |
-| 10 tables | PostgreSQL, Alembic migrations |
-| 200 tests | 139 backend (90% coverage) + 61 frontend |
-| 5 Lambda functions | four services plus a migration runner |
 
 ---
 
