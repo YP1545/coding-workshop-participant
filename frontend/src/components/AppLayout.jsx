@@ -7,7 +7,6 @@ import {
 import ApartmentIcon from '@mui/icons-material/ApartmentOutlined'
 import BadgeIcon from '@mui/icons-material/BadgeOutlined'
 import BuildIcon from '@mui/icons-material/BuildOutlined'
-import DomainIcon from '@mui/icons-material/DomainOutlined'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import GroupIcon from '@mui/icons-material/GroupOutlined'
 import HomeIcon from '@mui/icons-material/HomeOutlined'
@@ -19,6 +18,9 @@ import WarningIcon from '@mui/icons-material/WarningAmberOutlined'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useMediaQuery } from 'react-responsive'
 import { useAuth } from '../auth/useAuth'
+// Imported rather than referenced from public/, so Vite fingerprints the file
+// and a new logo cannot be served from a stale cache.
+import acmeLogo from '../assets/acme-logo.webp'
 import { SIDEBAR, BORDER } from '../theme'
 
 /**
@@ -100,18 +102,25 @@ export default function AppLayout() {
 
   const railContent = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: SIDEBAR.bg }}>
-      <Toolbar sx={{ gap: 1.5, borderBottom: `1px solid ${SIDEBAR.border}` }}>
-        <DomainIcon sx={{ color: SIDEBAR.activeBg }} />
-        <Typography component={Link} to="/" noWrap
+      {/* The brand above the product name rather than beside it: two wordmarks
+          on one line at this width crowd each other, and the logo has to stay
+          large enough to read. The block is the link home, so it is a generous
+          tap target without needing a minimum height. */}
+      <Box component={Link} to="/"
+           sx={{
+             display: 'block', px: 2.5, py: 2, textDecoration: 'none',
+             borderBottom: `1px solid ${SIDEBAR.border}`,
+           }}>
+        <Box component="img" src={acmeLogo} alt="ACME"
+             sx={{ display: 'block', width: 104, height: 'auto' }} />
+        <Typography noWrap
                     sx={{
-                      color: SIDEBAR.textActive, textDecoration: 'none',
-                      fontWeight: 700, fontSize: '1.05rem',
-                      display: 'flex', alignItems: 'center', minHeight: 44, minWidth: 0,
-                      overflow: 'hidden', textOverflow: 'ellipsis',
+                      mt: 0.75, color: SIDEBAR.text, fontSize: '0.8125rem',
+                      fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase',
                     }}>
           Incident Operations
         </Typography>
-      </Toolbar>
+      </Box>
 
       <List sx={{ p: 1.5, flexGrow: 1 }}>
         {navItems.map((item) => {
@@ -244,12 +253,19 @@ export default function AppLayout() {
               </>
             ) : (
               <>
-                <Typography component={Link} to="/"
-                            sx={{ fontWeight: 700, color: 'text.primary',
-                                  textDecoration: 'none', display: 'flex',
-                                  alignItems: 'center', minHeight: 44, flexGrow: 1 }}>
-                  Incident Operations
-                </Typography>
+                {/* Signed out there is no sidebar, so the brand belongs here. */}
+                <Box component={Link} to="/"
+                     sx={{ display: 'flex', alignItems: 'center', gap: 1.5,
+                           textDecoration: 'none', minHeight: 44, flexGrow: 1 }}>
+                  <Box component="img" src={acmeLogo} alt="ACME"
+                       sx={{ display: 'block', width: 88, height: 'auto' }} />
+                  <Typography sx={{ color: 'text.secondary', fontSize: '0.8125rem',
+                                    fontWeight: 500, letterSpacing: '0.04em',
+                                    textTransform: 'uppercase',
+                                    display: { xs: 'none', sm: 'block' } }}>
+                    Incident Operations
+                  </Typography>
+                </Box>
                 <Button component={Link} to="/login" variant="contained">
                   Sign in
                 </Button>
